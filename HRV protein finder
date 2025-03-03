@@ -1,0 +1,71 @@
+#Cell 1
+import time
+import ssl
+import certifi
+import re
+from Bio import Entrez, SeqIO
+
+ssl_context = ssl.create_default_context(cafile=certifi.where())
+ssl._create_default_https_context = ssl._create_unverified_context
+
+Entrez.email = "rebeirofrancis09@gmail.com"  # Replace with your email
+
+#Cell 2
+def fetch_rhinovirus_proteins(max_results=50):
+    print(f"🔎 Searching for proteins with: Rhinovirus AND 'human rhinovirus' AND HRV...")
+    search_term = '"Rhinovirus" AND "human rhinovirus" AND "HRV"'  # Specific search term
+    try:
+        handle = Entrez.esearch(db="protein", term=search_term, retmax=1000)  # Increase to 1000
+        record = Entrez.read(handle)
+        handle.close()
+        protein_ids = record["IdList"]
+        
+        if not protein_ids:
+            print("❌ No proteins found matching the criteria!")
+            return []
+
+        print(f"✅ Found {len(protein_ids)} proteins. Fetching sequences...")
+        proteins = []
+        for prot_id in protein_ids:
+            time.sleep(1)  # Respect API rate limits
+            handle = Entrez.efetch(db="protein", id=prot_id, rettype="gb", retmode="text")
+            seq_record = SeqIO.read(handle, "genbank")
+            handle.close()
+
+            # Check for rhinovirus in the description
+            if re.search(r"Human rhinovirus|HRV", seq_record.description, re.IGNORECASE):
+                proteins.append((seq_record.id, seq_record.description, str(seq_record.seq)))
+
+            if len(proteins) >= max_results:  # Limit to specified max_results
+                break
+
+        if not proteins:
+            print("⚠️ No valid proteins were found after filtering.")
+            return []
+
+        print(f"✅ Successfully fetched {len(proteins)} protein sequences!")
+        return proteins
+
+    except Exception as e:
+        print(f"❌ Error fetching proteins: {e}")
+        return []
+#CELL 3
+def save_proteins_to_file(proteins, filename="rhinovirus_HRV_proteins.txt"):
+    if not proteins:
+        print("⚠️ No proteins to save.")
+        return
+    
+    try:
+        with open(filename, 'w') as file:
+            for prot_id, description, sequence in proteins:
+                file.write(f"> {prot_id} | {description}\n{sequence}\n\n")
+        print(f"💾 Saved {len(proteins)} proteins to {filename}. You can download it from the Jupyter Notebook home page.")
+    except Exception as e:
+        print(f"❌ An error occurred while saving proteins: {str(e)}")
+#Cell4
+def main():
+    proteins = fetch_rhinovirus_proteins(max_results=50)
+    save_proteins_to_file(proteins, filename="rhinovirus_HRV_proteins.txt")
+
+if __name__ == "__main__":
+    main()
