@@ -1,0 +1,114 @@
+from flask import Flask, request, render_template_string
+import re
+
+app = Flask(__name__)
+
+# HTML template for input
+FORM_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Antigenicity Predictor</title>
+</head>
+<body>
+    <h1>Antigenicity Predictor</h1>
+    <form method="post">
+        <label for="seq">Protein Sequence (FASTA or plain sequence):</label><br>
+        <textarea id="seq" name="seq" rows="10" cols="60" placeholder="Paste your protein sequence here..."></textarea><br><br>
+        <input type="submit" value="Predict">
+    </form>
+</body>
+</html>
+'''
+
+# HTML template for result
+RESULT_HTML = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prediction Result</title>
+</head>
+<body>
+    <h1>Prediction Result</h1>
+    {% if score is not none %}
+        <p><strong>Antigenicity Score:</strong> {{ score }}</p>
+        <p><strong>Classification:</strong> {{ classification }}</p>
+    {% else %}
+        <p>Error processing sequence.</p>
+    {% endif %}
+    <br>
+    <a href="/">Try another sequence</a>
+</body>
+</html>
+'''
+
+def calculate_vaxijen_score(protein_seq, organism="bacterial", threshold=0.4):
+    """
+    Calculates the VaxiJen score based on the provided sequence and organism.
+    This is a simplified approximation and might not perfectly match the online tool.
+    """
+
+    if organism == "bacterial":
+        weights = {
+            'D': 1.31, 'E': 1.31, 'R': 1.31, 'K': 1.31,
+            'S': 1.00, 'T': 1.00, 'N': 1.00, 'Q': 1.00,
+            'A': 0.00, 'V': 0.00, 'L': 0.00, 'I': 0.00,
+            'M': 0.00, 'F': 0.00, 'Y': 0.00, 'W': 0.00,
+            'H': 0.00, 'C': 0.00, 'G': 0.00, 'P': 0.00
+        }
+    elif organism == "viral":
+        weights = {
+            'D': 1.25, 'E': 1.25, 'R': 1.25, 'K': 1.25,
+            'S': 1.00, 'T': 1.00, 'N': 1.00, 'Q': 1.00,
+            'A': 0.00, 'V': 0.00, 'L': 0.00, 'I': 0.00,
+            'M': 0.00, 'F': 0.00, 'Y': 0.00, 'W': 0.00,
+            'H': 0.00, 'C': 0.00, 'G': 0.00, 'P': 0.00
+        }
+    elif organism == "tumor":
+        weights = {
+            'D': 1.35, 'E': 1.35, 'R': 1.35, 'K': 1.35,
+            'S': 1.00, 'T': 1.00, 'N': 1.00, 'Q': 1.00,
+            'A': 0.00, 'V': 0.00, 'L': 0.00, 'I': 0.00,
+            'M': 0.00, 'F': 0.00, 'Y': 0.00, 'W': 0.00,
+            'H': 0.00, 'C': 0.00, 'G': 0.00, 'P': 0.00
+        }
+    else: #parasite
+        weights = {
+            'D': 1.30, 'E': 1.30, 'R': 1.30, 'K': 1.30,
+            'S': 1.00, 'T': 1.00, 'N': 1.00, 'Q': 1.00,
+            'A': 0.00, 'V': 0.00, 'L': 0.00, 'I': 0.00,
+            'M': 0.00, 'F': 0.00, 'Y': 0.00, 'W': 0.00,
+            'H': 0.00, 'C': 0.00, 'G': 0.00, 'P': 0.00
+        }
+
+    #Remove FASTA header if present
+    protein_seq = ''.join(protein_seq.split('\n')[1:]) if '>' in protein_seq else protein_seq
+    protein_seq = re.sub(r'[^A-Z]', '', protein_seq.upper()) # Remove non-amino acid characters
+
+    if not protein_seq:
+        return None
+
+    score = sum(weights.get(aa, 0) for aa in protein_seq) / len(protein_seq) if protein_seq else 0
+
+    return score
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    if request.method == 'POST':
+        protein_seq = request.form.get('seq', '').strip()
+        if not protein_seq:
+            return render_template_string(RESULT_HTML, score=None)
+
+        score = calculate_vaxijen_score(protein_seq)
+        if score is not None:
+            classification = "Antigenic" if score >= 0.4 else "Non-antigenic"
+            return render_template_string(RESULT_HTML, score=score, classification=classification)
+        else:
+            return render_template_string(RESULT_HTML, score=None)
+
+    return render_template_string(FORM_HTML)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
